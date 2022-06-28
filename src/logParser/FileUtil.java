@@ -3,10 +3,12 @@ package logParser;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -26,67 +28,32 @@ public class FileUtil {
 	 * 파일을 읽어서 변수에 저장
 	 * @return
 	 */
-	public static List<LogVO> readFile(String filePath) {
-		List<LogVO> rList = new ArrayList<LogVO>();
-		LogVO logVO = null;
+	public static List<String[]> readFile(String filePath) {
+		List<String[]> splitFile = new ArrayList<>();
 
-		try{
-			//파일 객체 생성
-			File file = new File(filePath);
-			
-			//////////////
-//			Scanner sc = new Scanner(file);
-//			int cnt = 0;
-//			while(sc.hasNextLine() && cnt < 100) {
-//				System.out.println(cnt+"*"+sc.nextLine());
-//				cnt++;
-//			}
-			Map<String, Long> freq;
-			
-			try (Stream<String> words = new Scanner(file).tokens()) {
-				freq = words.collect(
-				        Collectors.groupingBy(String::toLowerCase, Collectors.counting())
-				);
-			} catch (Exception e) {
-				// TODO: handle exception
-			}
-			
-			
-			//////////////
-			//입력 스트림 생성
-			FileReader filereader = new FileReader(file);
-			//입력 버퍼 생성
-			BufferedReader bufReader = new BufferedReader(filereader);
-			String line = "";
-			int rowCnt = 0;
-			while((line = bufReader.readLine()) != null){
+        try{
 
-				logVO = stringToArr(line);
-				rList.add(logVO);
+            BufferedReader br = new BufferedReader(new InputStreamReader(new FileInputStream(filePath), "euc-kr"));
 
-			}
-			bufReader.close();
-		}catch (FileNotFoundException e) {
-			e.printStackTrace();
-			// TODO: handle exception
-		}catch(IOException e){
-			System.out.println(e);
-		}
+            br.lines().filter(line -> line.contains("200")).map(line -> line.split("\\]\\[")).forEach(splitFile::add);
+        }catch(Exception e){
+        	e.printStackTrace();
+        }
 
 
-		return rList;
+		return splitFile;
 	}
 	
 
 	public static boolean outFile(String filePath,
-			List<Entry<String, Integer>> apiList,
-			List<Entry<String, Integer>> idList,
-			List<Entry<String, Integer>> browList) {
+			int totCnt,
+			Map logInfoMap) {
 		boolean result = false;
-
-		Entry<String, Integer> tempEntry = null;
-		String topApi = "";
-
+		
+		String maxApiKey = logInfoMap.get("maxApiKey").toString();
+		
+		List serviceTop3 = (List) logInfoMap.get("serviceTop3");
+		List browserList = (List) logInfoMap.get("browserList");
 
 		try {
 			//파일 객체 생성
@@ -100,10 +67,7 @@ public class FileUtil {
 				bufferedWriter.newLine();
 				bufferedWriter.newLine();
 
-				tempEntry = apiList.get(0);
-
-				topApi = tempEntry.getKey();
-				bufferedWriter.write(topApi);
+				bufferedWriter.write(maxApiKey);
 
 				bufferedWriter.newLine();
 				bufferedWriter.newLine();
@@ -114,6 +78,8 @@ public class FileUtil {
 
 				bufferedWriter.newLine();
 				bufferedWriter.newLine();
+				
+				serviceTop3.stream().forEach(System.out.print(Map.Entry::getKey));
 
 				for(int i=0;i<3;i++) {
 					tempEntry = idList.get(i);
@@ -170,28 +136,31 @@ public class FileUtil {
 
 		infoArr = str.substring(1, str.length()-1).split("\\]\\[");
 		
-		LogVO logVO = new LogVO();
+		LogVO logVO = null;
 		//상태, url, 브라우저, 시간, api service id, apikey
 		//[200, http://apis.daum.net/search/knowledge?apikey=23jf&q=daum, IE, 2012-06-10 08:00:00, knowledge, 23jf]
-
 		
-		logVO.setStatus(infoArr[0]);
-//		logVO.setUrl(infoArr[1]);
-		logVO.setBrowser(infoArr[2]);
-//		logVO.setTime(infoArr[3]);
+		boolean passFlag = false;
 		
 		try {
 			URL aURL = new URL(infoArr[1]);
 	        
 	        Map<String, String> map=getQueryMap(aURL.getQuery());
 	        // 상태코드도 넘어와서 apikey, p parmeter가 있는지 확인하여 상태가 맞는지 확인가능
+	        passFlag = chkValue(logVO);
 	        
-	        if(map != null &&map.containsKey("apikey")) {
-	        	//System.out.println("**apikey=" + map.get("apikey"));
-	        	logVO.setApikey(map.get("apikey"));
+	        if(passFlag) {
+	        	logVO = new LogVO();
+	        	logVO.setStatus(infoArr[0]);
+	        	logVO.setBrowser(infoArr[2]);
+	        	
+	        	if(map != null &&map.containsKey("apikey")) {
+	        		//System.out.println("**apikey=" + map.get("apikey"));
+	        		logVO.setApikey(map.get("apikey"));
+	        	}
+	        	System.out.println("**apiServiceId=" + aURL.getPath().replace("/search/", ""));
+	        	logVO.setApiServiceId(aURL.getPath().replace("/search/", ""));
 	        }
-	        //System.out.println("**apiServiceId=" + aURL.getPath().replace("/search/", ""));
-	        logVO.setApiServiceId(aURL.getPath().replace("/search/", ""));
 	        
 
 		} catch (MalformedURLException e) {
@@ -200,6 +169,15 @@ public class FileUtil {
 		}
 
 		return logVO;
+	}
+	
+	public static boolean chkValue(LogVO logVO) {
+		boolean result = true;
+		
+		
+		
+		return result;
+		
 	}
 	
 	
@@ -226,7 +204,7 @@ public class FileUtil {
 	        	System.out.println("**apikey=" + map.get("apikey"));
 	        	apikey = map.get("apikey");
 	        }
-	        System.out.println("**apiServiceId=" + aURL.getPath().replace("/search/", ""));
+	        //System.out.println("**apiServiceId=" + aURL.getPath().replace("/search/", ""));
 	        apiServiceId = aURL.getPath().replace("/search/", "");
 	        
 
